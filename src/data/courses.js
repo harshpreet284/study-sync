@@ -130,7 +130,7 @@ export const courses = [
     rating: 4.5,
     duration: "18 hours",
     instructor: "Robert Johnson",
-    thumbnail: "https://images.unsplash.com/photo-1510511459019-5d0197411bc6?auto=format&fit=crop&w=600&q=80",
+    thumbnail: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80",
     description: "Learn the fundamentals of cybersecurity, networking, and how to protect systems against common threats.",
     syllabus: [
       { week: 1, title: "Intro to Security", description: "Concepts and principles." },
@@ -234,7 +234,7 @@ export const courses = [
     rating: 4.7,
     duration: "28 hours",
     instructor: "Rob Pike",
-    thumbnail: "https://images.unsplash.com/photo-1526379095098-d400fd0bfce8?auto=format&fit=crop&w=600&q=80",
+    thumbnail: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
     description: "Learn Go (Golang) from scratch and build high-performance backend systems.",
     syllabus: [
       { week: 1, title: "Go Basics", description: "Syntax, variables, and functions." },
@@ -370,7 +370,7 @@ export const courses = [
     rating: 4.8,
     duration: "18 hours",
     instructor: "Evan You",
-    thumbnail: "https://images.unsplash.com/photo-1627398225058-f4f4087336eb?auto=format&fit=crop&w=600&q=80",
+    thumbnail: "https://images.unsplash.com/photo-1555099962-4199c345e5dd?auto=format&fit=crop&w=600&q=80",
     description: "Learn the latest features of Vue 3, including the Composition API and Pinia.",
     syllabus: [
       { week: 1, title: "Vue Basics", description: "Directives and components." },
