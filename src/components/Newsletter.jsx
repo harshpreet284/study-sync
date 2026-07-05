@@ -21,8 +21,8 @@ const Newsletter = () => {
               className="bg-background text-[#333] outline-none border border-[#ccc] rounded px-3 py-2 focus:border-[#2563eb] focus:shadow-[0_4px_8px_rgba(0,0,0,0.3)]" 
               placeholder="Email" 
             />
-            <button className="bg-primary text-background border-none rounded py-2 px-4 hover:bg-link">
-              send
+            <button className="bg-primary text-background border-none rounded py-2 px-6 transition-transform duration-200 hover:bg-link hover:scale-105 active:scale-95 shadow-md font-semibold">
+              Send
             </button>
           </form>
           <div className="text-[0.76rem] px-12 text-[#777]">

@@ -13,11 +13,11 @@ const Hero = () => {
             Our innovative platform offers an effortless and seamless approach to learning, empowering students of all ages to achieve brighter futures. Join us on a transformative journey to simplify education and unlock your full potential.
           </p>
 
-          <div className="flex gap-8 p-4 mt-4 items-center justify-center md:justify-start md:pl-0">
-            <a href="#start" className="border-none rounded-md bg-primary text-background transition-all duration-100 py-3 px-6 text-base font-semibold hover:bg-[#5254f8]">
+          <div className="flex gap-4 sm:gap-8 p-4 mt-4 items-center justify-center md:justify-start md:pl-0">
+            <a href="#start" className="border-none rounded-md bg-primary text-background transition-transform duration-200 py-3 px-6 text-base font-semibold hover:bg-link hover:scale-105 active:scale-95 shadow-md">
               Start Now
             </a>
-            <a href="#tour" className="border-none rounded-md bg-dark-gray text-background transition-all duration-100 py-3 px-6 text-base font-semibold hover:bg-gray">
+            <a href="#tour" className="border-none rounded-md bg-dark-gray text-background transition-transform duration-200 py-3 px-6 text-base font-semibold hover:bg-gray hover:scale-105 active:scale-95 shadow-md">
               Take Tour
             </a>
           </div>

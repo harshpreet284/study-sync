@@ -1,17 +1,28 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { courses } from '../data/courses';
 import CourseCard from '../components/CourseCard';
+import CourseSkeleton from '../components/CourseSkeleton';
 import { useDebounce } from '../hooks/useDebounce';
 
 const Courses = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
+  const [isLoading, setIsLoading] = useState(true);
+
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [difficultyFilter, setDifficultyFilter] = useState('All');
   const [durationFilter, setDurationFilter] = useState('All');
   const [ratingFilter, setRatingFilter] = useState('All');
+
+  // Simulate network request
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Extract unique categories dynamically
   const categories = useMemo(() => {
@@ -148,7 +159,7 @@ const Courses = () => {
 
           <button 
             onClick={clearFilters}
-            className="w-full sm:w-auto px-4 py-2 bg-light-gray text-dark-gray hover:bg-gray-200 border border-gray-300 rounded font-semibold text-sm transition-colors duration-200"
+            className="w-full sm:w-auto px-4 py-2 bg-light-gray text-dark-gray hover:bg-gray-200 border border-gray-300 rounded font-semibold text-sm transition-colors duration-200 hover:scale-105 active:scale-95"
           >
             Clear Filters
           </button>
@@ -156,10 +167,16 @@ const Courses = () => {
 
         {/* Results count */}
         <div className="mb-6 text-dark-gray font-medium">
-          Showing {filteredCourses.length} {filteredCourses.length === 1 ? 'course' : 'courses'}
+          Showing {isLoading ? '...' : filteredCourses.length} {filteredCourses.length === 1 && !isLoading ? 'course' : 'courses'}
         </div>
 
-        {filteredCourses.length > 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <CourseSkeleton key={n} />
+            ))}
+          </div>
+        ) : filteredCourses.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredCourses.map((course) => (
               <CourseCard key={course.id} course={course} />
@@ -174,7 +191,7 @@ const Courses = () => {
             <p className="text-gray text-lg">We couldn't find any courses matching your criteria.<br/>Try adjusting your filters or search term.</p>
             <button 
               onClick={clearFilters}
-              className="mt-4 px-6 py-2 bg-primary text-white font-semibold rounded hover:bg-link transition-colors duration-200"
+              className="mt-4 px-6 py-2 bg-primary text-white font-semibold rounded transition-transform duration-200 hover:bg-link hover:scale-105 active:scale-95 shadow-md"
             >
               Clear All Filters
             </button>
