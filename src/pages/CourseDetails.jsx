@@ -91,7 +91,7 @@ const CourseDetails = () => {
             </div>
           </div>
 
-          <div className="mt-4 flex gap-4">
+          <div className="mt-4 flex flex-col sm:flex-row gap-4">
             <button className="bg-primary text-white font-bold py-3 px-8 rounded transition-transform duration-200 hover:bg-link hover:scale-105 active:scale-95 shadow-md">
               Enroll Now
             </button>

@@ -24,7 +24,7 @@ const Hero = () => {
         </div>
 
         <div className="flex items-center justify-center">
-          <div className="rounded-[1.225rem] overflow-hidden shadow-[0px_4px_8px_rgba(0,0,0,0.1)] h-[50vh] md:h-[65vh]">
+          <div className="rounded-[1.225rem] overflow-hidden shadow-[0px_4px_8px_rgba(0,0,0,0.1)] min-h-[300px] h-auto sm:h-[50vh] md:h-[65vh] w-full">
             <img 
               src="/images/usgs-hoS3dzgpHzw-unsplash.jpg" 
               alt="sectionImage"
