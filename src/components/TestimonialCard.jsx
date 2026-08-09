@@ -4,7 +4,7 @@ const TestimonialCard = ({ testimonial }) => {
       <div className="text-sm text-[#555]">
         {testimonial.text}
       </div>
-      <div className="testimonial-avatar">
+      <div className="testimonial-avatar flex justify-center">
         <img src={testimonial.avatar} alt={testimonial.name} className="h-20 w-20" />
       </div>
       <div className="testimonial-details">

@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Courses from './pages/Courses';
@@ -32,6 +32,10 @@ const router = createBrowserRouter([
       {
         path: 'about',
         element: <About />,
+      },
+      {
+        path: 'contact',
+        element: <Navigate to="/" replace />,
       },
       {
         path: '*',
