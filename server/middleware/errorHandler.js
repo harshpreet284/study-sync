@@ -20,12 +20,16 @@ export const errorHandler = (err, req, res, next) => {
 
   // Server-side logging for diagnostics
   console.error(`[Error] ${req.method} ${req.originalUrl} - Status: ${statusCode} - ${err.message}`);
+  if (statusCode >= 500 && err.stack) {
+    console.error(err.stack);
+  }
 
-  // Safe client response
+  // Safe client response: never leak internal details, database URIs, paths, or stack traces on 500s,
+  // regardless of environment (including development)
   const isServerFault = statusCode >= 500;
-  const safeMessage = isServerFault && process.env.NODE_ENV === 'production'
+  const safeMessage = isServerFault
     ? 'An unexpected internal server error occurred.'
-    : err.message || 'Internal server error';
+    : err.message || 'Request failed';
 
   res.status(statusCode).json({
     success: false,

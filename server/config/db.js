@@ -31,3 +31,17 @@ mongoose.connection.on('disconnected', () => {
 mongoose.connection.on('error', (err) => {
   console.error(`[Database] MongoDB connection error: ${err.message}`);
 });
+
+/**
+ * Disconnect from MongoDB cleanly if connected or connecting.
+ */
+export const disconnectDB = async () => {
+  if (mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.connection.close(false);
+      console.log('[Database] MongoDB connection closed.');
+    } catch (error) {
+      console.error(`[Database] Error closing MongoDB connection: ${error.message}`);
+    }
+  }
+};
