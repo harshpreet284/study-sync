@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "seed": "node scripts/seedResources.js",
+    "test": "node tests/models.test.js"
   },
   "keywords": [
     "studysync",

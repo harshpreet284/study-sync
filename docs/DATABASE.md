@@ -56,6 +56,17 @@ Conceptual module fields:
 - description
 - order
 
+Frontend compatibility and display fields (preserved from courses.js):
+- thumbnail: String (course card visual thumbnail URL)
+- instructor: String (course instructor or creator attribution)
+- rating: Number, 0–5 (course user rating)
+
+Catalog migration and seed tracking:
+- sourceId: Number, unique, sparse
+  - Stable numeric identifier mapping directly to legacy course `id` in `src/data/courses.js`.
+  - Configured with a unique, sparse index so only migrated legacy resources require it, leaving future dynamically created resources unconstrained.
+  - Used by the seed migration script (`server/scripts/seedResources.js`) for idempotent upserts (`findOne({ sourceId })`), guaranteeing repeated executions update existing records rather than creating duplicates.
+
 Resources are global and are not owned by individual users.
 
 ## 4. LearningProgress
@@ -168,7 +179,14 @@ Add indexes only when supported by actual query patterns.
 
 At minimum, uniqueness is required for User.email.
 
-Additional indexes should be introduced when resource search or user-specific queries demonstrate a need.
+Additional indexes implemented:
+- `Resource.sourceId`: unique, sparse index ensuring idempotency during catalog migration.
+- `Resource.category` + `Resource.difficulty`: compound index for catalog filtering.
+- `Resource.skills`: index for skill-based catalog search.
+- `LearningProgress.user` + `LearningProgress.resource`: compound unique index to prevent duplicate learning records for the same user and resource.
+- `LearningProgress.user` + `LearningProgress.status`: compound index for user dashboard queries.
+- `LearningGoal.user` + `LearningGoal.status`: compound index for goal tracking queries.
+- `LearningPlan.user` + `LearningPlan.goal`: compound index for user plan lookup.
 
 Do not add indexes purely for appearance.
 
