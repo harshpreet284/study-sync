@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node scripts/seedResources.js",
-    "test": "node tests/models.test.js"
+    "test": "node tests/models.test.js && node tests/auth.test.js"
   },
   "keywords": [
     "studysync",
@@ -18,9 +18,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.1",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.9.5"
   }
 }

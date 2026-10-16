@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB, disconnectDB } from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -32,11 +33,12 @@ app.use(cors({
   credentials: true,
 }));
 
-// Body parsing middleware
-app.use(express.json());
+// Body parsing middleware with reasonable request size limit
+app.use(express.json({ limit: '10kb' }));
 
 // API Routes
 app.use('/api', healthRoutes);
+app.use('/api/auth', authRoutes);
 
 // Error Handling Middleware
 app.use(notFound);
@@ -90,7 +92,38 @@ const shutdown = async (signal) => {
   }
 };
 
+/**
+ * Validates that JWT_SECRET is configured and sufficiently strong (at least 32 characters)
+ * before starting the server. A cryptographically random secret (e.g. 64-character hex)
+ * should be generated and stored in the local server/.env file only.
+ *
+ * @returns {boolean} True if valid, false otherwise
+ */
+const validateJwtConfig = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error('[Startup Error] JWT_SECRET environment variable is missing.');
+    console.error('[Startup Error] A cryptographically random secret of at least 32 characters is required for authentication.');
+    return false;
+  }
+
+  const trimmedSecret = String(secret).trim();
+  if (trimmedSecret.length < 32) {
+    console.error(`[Startup Error] JWT_SECRET is too short (${trimmedSecret.length} characters).`);
+    console.error('[Startup Error] A cryptographically random secret of at least 32 characters is required to ensure token security.');
+    return false;
+  }
+
+  return true;
+};
+
 const startServer = async () => {
+  // Validate critical security configuration before startup
+  if (!validateJwtConfig()) {
+    console.error('[Server] Server startup aborted due to invalid security configuration.');
+    process.exit(1);
+  }
+
   // Attempt database connection
   await connectDB();
 
@@ -125,5 +158,5 @@ if (process.env.NODE_ENV !== 'test') {
   startServer();
 }
 
-export { app, startServer, shutdown };
+export { app, startServer, shutdown, validateJwtConfig };
 
