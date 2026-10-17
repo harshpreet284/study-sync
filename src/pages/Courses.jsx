@@ -1,14 +1,34 @@
 import { useState, useMemo, useEffect } from 'react';
-import { courses } from '../data/courses';
 import CourseCard from '../components/CourseCard';
 import CourseSkeleton from '../components/CourseSkeleton';
 import { useDebounce } from '../hooks/useDebounce';
+import { resourceService } from '../services/resourceService';
+
+const CANONICAL_CATEGORIES = [
+  'All',
+  'Blockchain',
+  'Cloud Computing',
+  'Computer Science',
+  'Data Science',
+  'Design',
+  'DevOps',
+  'Finance',
+  'Game Development',
+  'Management',
+  'Mobile Development',
+  'Photography',
+  'Security',
+  'Web Development',
+];
 
 const Courses = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [rawCourses, setRawCourses] = useState([]);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -16,19 +36,61 @@ const Courses = () => {
   const [durationFilter, setDurationFilter] = useState('All');
   const [ratingFilter, setRatingFilter] = useState('All');
 
-  // Simulate network request
+  // Fetch courses from the Resource Read API with AbortController to prevent race conditions
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
+    const controller = new AbortController();
+    const { signal } = controller;
 
-  // Extract unique categories dynamically
+    const loadCourses = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { courses: fetchedCourses } = await resourceService.getResources(
+          {
+            search: debouncedSearchTerm,
+            category: categoryFilter,
+            difficulty: difficultyFilter,
+          },
+          { signal }
+        );
+
+        if (!signal.aborted) {
+          setRawCourses(fetchedCourses);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        // Treat intentional cancellation as cancellation, not as a user-facing API failure
+        if (err.name === 'AbortError' || signal.aborted) {
+          return;
+        }
+        console.error('Failed to fetch courses:', err);
+        setError(
+          err.message || 'Failed to load courses from the catalog. Please check your connection and try again.'
+        );
+        setRawCourses([]);
+        setIsLoading(false);
+      }
+    };
+
+    loadCourses();
+
+    return () => {
+      controller.abort();
+    };
+  }, [debouncedSearchTerm, categoryFilter, difficultyFilter, retryTrigger]);
+
+  const handleRetry = () => {
+    setRetryTrigger((prev) => prev + 1);
+  };
+
+  // Derive categories list (ensuring all canonical catalog categories remain selectable)
   const categories = useMemo(() => {
-    const uniqueCategories = new Set(courses.map(c => c.category));
-    return ['All', ...Array.from(uniqueCategories).sort()];
-  }, []);
+    const dynamicSet = new Set(CANONICAL_CATEGORIES);
+    rawCourses.forEach((c) => {
+      if (c.category) dynamicSet.add(c.category);
+    });
+    return Array.from(dynamicSet);
+  }, [rawCourses]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -38,35 +100,20 @@ const Courses = () => {
     setRatingFilter('All');
   };
 
+  // Client-side filtering for UI filters not modeled as backend API query parameters (rating & duration)
   const filteredCourses = useMemo(() => {
-    return courses.filter((course) => {
-      // Search logic
-      if (debouncedSearchTerm) {
-        const lowerCaseSearch = debouncedSearchTerm.toLowerCase();
-        const matchTitle = course.title.toLowerCase().includes(lowerCaseSearch);
-        const matchInstructor = course.instructor.toLowerCase().includes(lowerCaseSearch);
-        const matchCategory = course.category.toLowerCase().includes(lowerCaseSearch);
-        
-        if (!matchTitle && !matchInstructor && !matchCategory) return false;
-      }
-
-      // Category logic
-      if (categoryFilter !== 'All' && course.category !== categoryFilter) return false;
-
-      // Difficulty logic
-      if (difficultyFilter !== 'All' && course.level !== difficultyFilter) return false;
-
-      // Rating logic
+    return rawCourses.filter((course) => {
+      // Rating logic (unrated resources have rawRating: 0 and will not match positive thresholds)
       if (ratingFilter !== 'All') {
         const minRating = parseFloat(ratingFilter);
-        if (course.rating < minRating) return false;
+        if (course.rawRating < minRating) return false;
       }
 
-      // Duration logic (parsing "XX hours")
+      // Duration logic (based on estimatedDuration in hours)
       if (durationFilter !== 'All') {
-        const hours = parseInt(course.duration);
+        const hours = course.estimatedDuration;
         if (durationFilter === 'Short') {
-          if (hours >= 20) return false;
+          if (hours <= 0 || hours >= 20) return false;
         } else if (durationFilter === 'Medium') {
           if (hours < 20 || hours > 40) return false;
         } else if (durationFilter === 'Long') {
@@ -76,7 +123,7 @@ const Courses = () => {
 
       return true;
     });
-  }, [debouncedSearchTerm, categoryFilter, difficultyFilter, durationFilter, ratingFilter]);
+  }, [rawCourses, ratingFilter, durationFilter]);
 
   return (
     <div className="flex-grow flex flex-col items-center bg-background p-4 sm:p-8">
@@ -88,9 +135,9 @@ const Courses = () => {
 
         {/* Search Bar */}
         <div className="mb-4 relative">
-          <input 
-            type="text" 
-            placeholder="Search by title, instructor, or category..." 
+          <input
+            type="text"
+            placeholder="Search by title, description, or skills..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full px-5 py-3 pl-12 rounded-lg border border-gray-300 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 text-text"
@@ -106,19 +153,21 @@ const Courses = () => {
         <div className="flex flex-wrap gap-4 mb-6 items-end bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
           <div className="flex flex-col gap-1 w-full sm:w-auto flex-grow">
             <label className="text-xs font-semibold text-gray uppercase tracking-wider">Category</label>
-            <select 
-              value={categoryFilter} 
+            <select
+              value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-primary text-sm w-full"
             >
-              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </div>
 
           <div className="flex flex-col gap-1 w-full sm:w-auto flex-grow">
             <label className="text-xs font-semibold text-gray uppercase tracking-wider">Difficulty</label>
-            <select 
-              value={difficultyFilter} 
+            <select
+              value={difficultyFilter}
               onChange={(e) => setDifficultyFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-primary text-sm w-full"
             >
@@ -131,8 +180,8 @@ const Courses = () => {
 
           <div className="flex flex-col gap-1 w-full sm:w-auto flex-grow">
             <label className="text-xs font-semibold text-gray uppercase tracking-wider">Duration</label>
-            <select 
-              value={durationFilter} 
+            <select
+              value={durationFilter}
               onChange={(e) => setDurationFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-primary text-sm w-full"
             >
@@ -145,8 +194,8 @@ const Courses = () => {
 
           <div className="flex flex-col gap-1 w-full sm:w-auto flex-grow">
             <label className="text-xs font-semibold text-gray uppercase tracking-wider">Min Rating</label>
-            <select 
-              value={ratingFilter} 
+            <select
+              value={ratingFilter}
               onChange={(e) => setRatingFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-primary text-sm w-full"
             >
@@ -157,7 +206,7 @@ const Courses = () => {
             </select>
           </div>
 
-          <button 
+          <button
             onClick={clearFilters}
             className="w-full sm:w-auto px-4 py-2 bg-light-gray text-dark-gray hover:bg-gray-200 border border-gray-300 rounded font-semibold text-sm transition-colors duration-200 hover:scale-105 active:scale-95"
           >
@@ -170,11 +219,39 @@ const Courses = () => {
           Showing {isLoading ? '...' : filteredCourses.length} {filteredCourses.length === 1 && !isLoading ? 'course' : 'courses'}
         </div>
 
+        {/* Content States: Loading / Error / Empty / Grid */}
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
               <CourseSkeleton key={n} />
             ))}
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-lg border border-red-200 shadow-sm">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-16 w-16 text-red-400 mb-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <h2 className="text-2xl font-bold text-text mb-2">Unable to Load Courses</h2>
+            <p className="text-gray text-base max-w-[500px] mb-6">
+              {error}
+            </p>
+            <button
+              onClick={handleRetry}
+              className="px-6 py-2.5 bg-primary text-white font-semibold rounded transition-transform duration-200 hover:bg-link hover:scale-105 active:scale-95 shadow-md"
+            >
+              Try Again
+            </button>
           </div>
         ) : filteredCourses.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -189,7 +266,7 @@ const Courses = () => {
             </svg>
             <h2 className="text-2xl font-bold text-text mb-2">No courses found</h2>
             <p className="text-gray text-lg">We couldn't find any courses matching your criteria.<br/>Try adjusting your filters or search term.</p>
-            <button 
+            <button
               onClick={clearFilters}
               className="mt-4 px-6 py-2 bg-primary text-white font-semibold rounded transition-transform duration-200 hover:bg-link hover:scale-105 active:scale-95 shadow-md"
             >
