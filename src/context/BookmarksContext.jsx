@@ -1,30 +1,68 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo, useCallback } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { courses } from '../data/courses';
 
 const BookmarksContext = createContext();
 
+import {
+  normalizeBookmarkIds,
+  matchesBookmarkId,
+} from '../services/resourceService';
+
+export { normalizeBookmarkIds, matchesBookmarkId };
+
 export const BookmarksProvider = ({ children }) => {
-  const [bookmarkedIds, setBookmarkedIds] = useLocalStorage('studysync-bookmarks', []);
+  const [storedIds, setStoredIds] = useLocalStorage('studysync-bookmarks', []);
 
-  const toggleBookmark = (courseId) => {
-    setBookmarkedIds((prevIds) => {
-      if (prevIds.includes(courseId)) {
-        return prevIds.filter(id => id !== courseId);
-      } else {
-        return [...prevIds, courseId];
-      }
-    });
-  };
+  // Sanitize and deduplicate on read to handle legacy or duplicate stored data
+  const bookmarkedIds = useMemo(() => normalizeBookmarkIds(storedIds), [storedIds]);
 
-  const isBookmarked = (courseId) => bookmarkedIds.includes(courseId);
+  const toggleBookmark = useCallback(
+    (courseId) => {
+      if (courseId == null || courseId === '') return;
 
-  const getBookmarkedCourses = () => {
-    return courses.filter(course => bookmarkedIds.includes(course.id));
-  };
+      setStoredIds((prevIds) => {
+        const normalizedPrev = normalizeBookmarkIds(prevIds);
+        const exists = normalizedPrev.some((id) => matchesBookmarkId(id, courseId));
+
+        if (exists) {
+          return normalizedPrev.filter((id) => !matchesBookmarkId(id, courseId));
+        } else {
+          // Store as number if numeric string, else preserve string
+          const toAdd =
+            typeof courseId === 'number'
+              ? courseId
+              : /^\d+$/.test(String(courseId).trim())
+                ? Number(courseId)
+                : String(courseId).trim();
+          return [...normalizedPrev, toAdd];
+        }
+      });
+    },
+    [setStoredIds]
+  );
+
+  const isBookmarked = useCallback(
+    (courseId) => {
+      if (courseId == null || courseId === '') return false;
+      return bookmarkedIds.some((id) => matchesBookmarkId(id, courseId));
+    },
+    [bookmarkedIds]
+  );
+
+  // Backward-compatible stub for any legacy synchronous callers
+  const getBookmarkedCourses = useCallback(() => {
+    return [];
+  }, []);
 
   return (
-    <BookmarksContext.Provider value={{ bookmarkedIds, toggleBookmark, isBookmarked, getBookmarkedCourses }}>
+    <BookmarksContext.Provider
+      value={{
+        bookmarkedIds,
+        toggleBookmark,
+        isBookmarked,
+        getBookmarkedCourses,
+      }}
+    >
       {children}
     </BookmarksContext.Provider>
   );

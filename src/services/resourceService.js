@@ -40,6 +40,53 @@ const formatDifficulty = (difficulty) => {
 };
 
 /**
+ * Normalizes an array of bookmark IDs:
+ * - Trims strings and converts numeric strings to numbers (e.g. "1" -> 1)
+ * - Removes null, undefined, or empty values
+ * - Deduplicates entries so e.g. [1, "1"] becomes [1]
+ *
+ * @param {Array<string|number>} rawIds
+ * @returns {Array<string|number>} Normalized unique IDs
+ */
+export const normalizeBookmarkIds = (rawIds) => {
+  if (!Array.isArray(rawIds)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const rawId of rawIds) {
+    if (rawId == null) continue;
+    if (typeof rawId === 'string' && rawId.trim() === '') continue;
+    if (typeof rawId === 'number' && !Number.isFinite(rawId)) continue;
+
+    const normalized =
+      typeof rawId === 'number'
+        ? rawId
+        : /^\d+$/.test(String(rawId).trim())
+          ? Number(rawId)
+          : String(rawId).trim();
+    if (normalized === '') continue;
+
+    const key = String(normalized);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(normalized);
+    }
+  }
+  return result;
+};
+
+/**
+ * Checks if two IDs match, supporting number and string equality.
+ *
+ * @param {string|number} a
+ * @param {string|number} b
+ * @returns {boolean}
+ */
+export const matchesBookmarkId = (a, b) => {
+  if (a == null || b == null) return false;
+  return String(a).trim() === String(b).trim();
+};
+
+/**
  * Adapts a backend Resource schema record into the shape expected by frontend components.
  *
  * Preserves compatibility with CourseCard, CourseDetails, and Bookmarks without
@@ -220,5 +267,77 @@ export const resourceService = {
 
     const result = await handleResponse(response);
     return adaptResourceToCourse(result.data);
+  },
+
+  /**
+   * Resolves an array of bookmark IDs to adapted course objects.
+   *
+   * Optimizes network traffic by fetching the catalog in a single query first,
+   * then selectively fetching any individual resources that were not present in the catalog.
+   * Handles both numeric sourceId and MongoDB _id values without duplication.
+   * Missing/deleted resources are filtered out cleanly without crashing the list.
+   *
+   * @param {Array<string|number>} bookmarkedIds
+   * @param {object} [options]
+   * @param {AbortSignal} [options.signal]
+   * @returns {Promise<object[]>} Array of adapted course objects in bookmark order
+   */
+  async getBookmarkedResources(bookmarkedIds = [], { signal } = {}) {
+    if (!Array.isArray(bookmarkedIds) || bookmarkedIds.length === 0) {
+      return [];
+    }
+
+    // 1. Fetch catalog in a single network request
+    const { courses: catalogCourses } = await this.getResources({}, { signal });
+    if (signal?.aborted) return [];
+
+    const matchedCourses = [];
+    const missingIds = [];
+
+    const matchesId = (course, targetId) => {
+      if (!course || targetId == null) return false;
+      return (
+        matchesBookmarkId(course.id, targetId) ||
+        (course.sourceId != null && matchesBookmarkId(course.sourceId, targetId)) ||
+        (course._id != null && matchesBookmarkId(course._id, targetId))
+      );
+    };
+
+    for (const id of bookmarkedIds) {
+      const found = catalogCourses.find((c) => matchesId(c, id));
+      if (found) {
+        matchedCourses.push(found);
+      } else {
+        missingIds.push(id);
+      }
+    }
+
+    // 2. Fetch any bookmarked resources not found in the main catalog
+    if (missingIds.length > 0) {
+      const individualResults = await Promise.allSettled(
+        missingIds.map((id) => this.getResourceById(id, { signal }))
+      );
+
+      if (signal?.aborted) return [];
+
+      for (const res of individualResults) {
+        if (res.status === 'fulfilled' && res.value) {
+          matchedCourses.push(res.value);
+        }
+      }
+    }
+
+    // 3. Deduplicate by unique course identity while preserving bookmark order
+    const seen = new Set();
+    const ordered = [];
+    for (const course of matchedCourses) {
+      const key = String(course.sourceId != null ? course.sourceId : course._id);
+      if (!seen.has(key)) {
+        seen.add(key);
+        ordered.push(course);
+      }
+    }
+
+    return ordered;
   },
 };
