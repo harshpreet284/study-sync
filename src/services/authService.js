@@ -22,6 +22,8 @@
  *     relies on strict origin isolation, secure dependencies, and avoiding script injection.
  */
 
+import { API_BASE_URL } from './apiConfig.js';
+
 const TOKEN_KEY = 'studysync_token';
 
 export const tokenStorage = {
@@ -71,7 +73,7 @@ export const authService = {
    * @returns {Promise<{ user: object, token: string }>}
    */
   async register({ name, email, password }) {
-    const response = await fetch('/api/auth/register', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -93,7 +95,7 @@ export const authService = {
    * @returns {Promise<{ user: object, token: string }>}
    */
   async login({ email, password }) {
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -120,7 +122,7 @@ export const authService = {
       throw new Error('No authentication token available.');
     }
 
-    const response = await fetch('/api/auth/me', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
