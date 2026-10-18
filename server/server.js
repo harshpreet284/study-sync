@@ -13,17 +13,58 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration - allow designated frontend origins
-const defaultOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-const configuredOrigin = process.env.CLIENT_URL;
-const allowedOrigins = configuredOrigin && !defaultOrigins.includes(configuredOrigin)
-  ? [configuredOrigin, ...defaultOrigins]
-  : defaultOrigins;
+/**
+ * Resolves and normalizes allowed CORS origins.
+ *
+ * Rules:
+ * - Includes default localhost development origins (http://localhost:5173, http://127.0.0.1:5173)
+ *   only when NODE_ENV is not 'production'.
+ * - Accepts single or comma-separated origins from CLIENT_URL.
+ * - Trims whitespace and strips any trailing slashes from each origin.
+ * - Filters out empty values and deduplicates entries.
+ *
+ * @param {string} [clientUrlEnv=process.env.CLIENT_URL]
+ * @param {string} [nodeEnv=process.env.NODE_ENV]
+ * @returns {string[]} Array of normalized unique allowed origins
+ */
+const resolveAllowedOrigins = (clientUrlEnv = process.env.CLIENT_URL, nodeEnv = process.env.NODE_ENV) => {
+  const isProduction = nodeEnv === 'production';
+  const defaultOrigins = isProduction ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  const origins = new Set(defaultOrigins);
+
+  if (typeof clientUrlEnv === 'string') {
+    clientUrlEnv
+      .split(',')
+      .map((url) => url.trim().replace(/\/+$/, ''))
+      .filter((url) => url.length > 0)
+      .forEach((url) => origins.add(url));
+  }
+
+  return Array.from(origins);
+};
+
+/**
+ * Checks if a given request origin is permitted by the CORS allowlist.
+ *
+ * - Non-browser requests without an Origin header (e.g. mobile apps, curl, server-to-server)
+ *   are permitted.
+ * - Incoming browser Origin is trimmed and stripped of any trailing slashes before comparison.
+ * - Exact match against normalized allowed origins is enforced (no wildcards).
+ *
+ * @param {string} [origin]
+ * @param {string[]} allowedOrigins
+ * @returns {boolean} True if allowed, false otherwise
+ */
+const isOriginAllowed = (origin, allowedOrigins) => {
+  if (!origin) return true;
+  const normalizedOrigin = origin.trim().replace(/\/+$/, '');
+  return allowedOrigins.includes(normalizedOrigin);
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server) or matching allowed list
-    if (!origin || allowedOrigins.includes(origin)) {
+    const allowedOrigins = resolveAllowedOrigins();
+    if (isOriginAllowed(origin, allowedOrigins)) {
       callback(null, true);
     } else {
       const corsError = new Error('Blocked by CORS policy');
@@ -160,5 +201,12 @@ if (process.env.NODE_ENV !== 'test') {
   startServer();
 }
 
-export { app, startServer, shutdown, validateJwtConfig };
+export {
+  app,
+  startServer,
+  shutdown,
+  validateJwtConfig,
+  resolveAllowedOrigins,
+  isOriginAllowed,
+};
 
