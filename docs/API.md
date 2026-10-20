@@ -180,6 +180,18 @@ Authentication: Required.
 Requirement:
 The requested goal must belong to the authenticated user.
 
+### DELETE /api/goals/:id
+
+Authentication: Required.
+
+Requirement:
+The requested goal must belong to the authenticated user.
+
+Responses:
+- `200 OK`: Learning goal deleted successfully.
+- `400 Bad Request`: Invalid goal ID format.
+- `404 Not Found`: Goal does not exist or does not belong to the authenticated user.
+
 ## 7. Learning Plans
 
 ### POST /api/plans/generate
