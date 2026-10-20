@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useBookmarks } from '../context/BookmarksContext';
 import CourseCard from '../components/CourseCard';
-import { resourceService } from '../services/resourceService';
+import { resourceService, matchesBookmarkId } from '../services/resourceService';
 
 const CourseDetails = () => {
   const { id } = useParams();
@@ -12,7 +12,7 @@ const CourseDetails = () => {
   const [error, setError] = useState(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
 
-  const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { isBookmarked, toggleBookmark, learningRecords } = useBookmarks();
 
   useEffect(() => {
     if (!id) return;
@@ -191,6 +191,46 @@ const CourseDetails = () => {
             <span>Rating: <span className="font-bold">⭐ {course.rating}</span></span>
             <span>Instructor: <span className="font-bold text-primary">{course.instructor}</span></span>
           </div>
+
+          {(() => {
+            const userLearningRecord = learningRecords?.find(
+              (r) =>
+                matchesBookmarkId(r.resource?.sourceId, course.id) ||
+                matchesBookmarkId(r.resource?._id, course.id)
+            );
+
+            if (!userLearningRecord) return null;
+
+            return (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      userLearningRecord.status === 'COMPLETED'
+                        ? 'bg-emerald-500'
+                        : userLearningRecord.status === 'IN_PROGRESS'
+                          ? 'bg-primary animate-pulse'
+                          : 'bg-gray-400'
+                    }`}
+                  ></div>
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                      Status: {userLearningRecord.status.replace('_', ' ')}
+                    </span>
+                    <div className="text-sm font-semibold text-text">
+                      {userLearningRecord.progress}% Completed
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  to="/bookmarks"
+                  className="text-xs font-bold text-primary hover:text-link underline underline-offset-2"
+                >
+                  Manage in My Learning &rarr;
+                </Link>
+              </div>
+            );
+          })()}
 
           <div>
             <h2 className="text-2xl font-bold text-text mb-4">About this course</h2>

@@ -3,9 +3,12 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import ScrollToTop from './ScrollToTop';
+import AuthPromptModal from './AuthPromptModal';
+import { useBookmarks } from '../context/BookmarksContext';
 
 const Layout = () => {
   const { pathname } = useLocation();
+  const { authPrompt, dismissAuthPrompt } = useBookmarks();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -19,6 +22,11 @@ const Layout = () => {
         <ScrollToTop />
       </main>
       <Footer />
+      <AuthPromptModal
+        isOpen={authPrompt?.isOpen}
+        message={authPrompt?.message}
+        onClose={dismissAuthPrompt}
+      />
     </>
   );
 };
