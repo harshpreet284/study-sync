@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node scripts/seedResources.js",
-    "test": "node tests/models.test.js && node tests/seed.test.js && node tests/auth.test.js && node tests/resources.test.js && node tests/cors.test.js && node tests/learning.test.js && node tests/goals.test.js"
+    "test": "node tests/models.test.js && node tests/seed.test.js && node tests/auth.test.js && node tests/resources.test.js && node tests/cors.test.js && node tests/learning.test.js && node tests/goals.test.js && node tests/plans.test.js"
   },
   "keywords": [
     "studysync",

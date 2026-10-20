@@ -7,6 +7,7 @@ import authRoutes from './routes/authRoutes.js';
 import resourceRoutes from './routes/resourceRoutes.js';
 import learningRoutes from './routes/learningRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
+import planRoutes from './routes/planRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -86,6 +87,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/goals', goalRoutes);
+app.use('/api/plans', planRoutes);
 
 // Error Handling Middleware
 app.use(notFound);
