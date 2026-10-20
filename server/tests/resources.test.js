@@ -52,16 +52,20 @@ const runResourceTests = async () => {
   // Test Database Isolation Check
   // ---------------------------------------------------------------------------
   console.log('\n[Test Isolation Check]');
-  const testUri = process.env.MONGODB_TEST_URI;
 
-  if (!testUri) {
-    console.warn('\n⚠️ [TEST SKIPPED] MONGODB_TEST_URI is not configured in server/.env.');
-    console.warn('Skipping integration tests to prevent connecting to the development database.');
-    return;
-  }
+  // Strictly enforce isolated local test database on 127.0.0.1:27017 to protect remote Atlas
+  const testUri = process.env.LOCAL_MONGODB_TEST_URI || 'mongodb://127.0.0.1:27017/studysync_test';
+  process.env.MONGODB_TEST_URI = testUri;
 
   if (process.env.MONGODB_URI && testUri === process.env.MONGODB_URI) {
     console.error('\n❌ [TEST ABORTED] MONGODB_TEST_URI cannot be identical to development MONGODB_URI.');
+    process.exitCode = 1;
+    return;
+  }
+
+  // Refuse to connect to any non-local or remote Atlas database
+  if (testUri.includes('mongodb+srv') || (!testUri.includes('127.0.0.1') && !testUri.includes('localhost'))) {
+    console.error('\n❌ [TEST ABORTED] Test database URI must point strictly to a local test database (127.0.0.1 or localhost).');
     process.exitCode = 1;
     return;
   }

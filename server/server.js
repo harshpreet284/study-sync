@@ -5,6 +5,7 @@ import { connectDB, disconnectDB } from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import resourceRoutes from './routes/resourceRoutes.js';
+import learningRoutes from './routes/learningRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -82,6 +83,7 @@ app.use(express.json({ limit: '10kb' }));
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/resources', resourceRoutes);
+app.use('/api/learning', learningRoutes);
 
 // Error Handling Middleware
 app.use(notFound);
