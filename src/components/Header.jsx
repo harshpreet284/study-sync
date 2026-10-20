@@ -39,6 +39,7 @@ const Header = () => {
           <NavLink to="/bookmarks" className={getNavClass}>
             {isAuthenticated ? 'My Learning' : 'Bookmarks'}
           </NavLink>
+          <NavLink to="/goals" className={getNavClass}>Goals</NavLink>
           <NavLink to="/about" className={getNavClass}>About</NavLink>
         </nav>
 
@@ -102,6 +103,7 @@ const Header = () => {
           <NavLink to="/bookmarks" onClick={closeMenu} className={getMobileNavClass}>
             {isAuthenticated ? 'My Learning' : 'Bookmarks'}
           </NavLink>
+          <NavLink to="/goals" onClick={closeMenu} className={getMobileNavClass}>Goals</NavLink>
           <NavLink to="/about" onClick={closeMenu} className={getMobileNavClass}>About</NavLink>
 
           {/* Mobile Auth Actions */}

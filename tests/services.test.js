@@ -28,6 +28,7 @@ const {
   matchesBookmarkId,
 } = await import('../src/services/resourceService.js');
 const { tokenStorage } = await import('../src/services/authService.js');
+const { goalService } = await import('../src/services/goalService.js');
 
 describe('Frontend Services Test Suite', () => {
   let originalFetch;
@@ -403,6 +404,390 @@ describe('Frontend Services Test Suite', () => {
       assert.equal(tokenStorage.get(), 'jwt-token-12345');
       tokenStorage.remove();
       assert.equal(tokenStorage.get(), null);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. goalService: Authentication Guards & Validation
+  // ---------------------------------------------------------------------------
+  describe('goalService: Authentication Guards & Validation', () => {
+    it('getGoals rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.getGoals({ token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required/i);
+          return true;
+        }
+      );
+    });
+
+    it('getGoalById rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.getGoalById('goal123', { token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required/i);
+          return true;
+        }
+      );
+    });
+
+    it('getGoalById validates goalId before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.getGoalById('', { token: 'mock-token' });
+        },
+        /Goal ID is required/i
+      );
+
+      await assert.rejects(
+        async () => {
+          await goalService.getGoalById(null, { token: 'mock-token' });
+        },
+        /Goal ID is required/i
+      );
+    });
+
+    it('createGoal rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.createGoal({ title: 'New Goal' }, { token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required/i);
+          return true;
+        }
+      );
+    });
+
+    it('createGoal validates title and data object before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.createGoal(null, { token: 'mock-token' });
+        },
+        /Goal data is required/i
+      );
+
+      await assert.rejects(
+        async () => {
+          await goalService.createGoal({ title: '' }, { token: 'mock-token' });
+        },
+        /Goal title is required/i
+      );
+
+      await assert.rejects(
+        async () => {
+          await goalService.createGoal({ title: '   ' }, { token: 'mock-token' });
+        },
+        /Goal title is required/i
+      );
+    });
+
+    it('updateGoal rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.updateGoal('goal123', { title: 'Updated' }, { token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required/i);
+          return true;
+        }
+      );
+    });
+
+    it('updateGoal validates goalId and updates presence before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.updateGoal('', { title: 'Updated' }, { token: 'mock-token' });
+        },
+        /Goal ID is required/i
+      );
+
+      await assert.rejects(
+        async () => {
+          await goalService.updateGoal('goal123', {}, { token: 'mock-token' });
+        },
+        /At least one field update is required/i
+      );
+    });
+
+    it('deleteGoal rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.deleteGoal('goal123', { token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required/i);
+          return true;
+        }
+      );
+    });
+
+    it('deleteGoal validates goalId before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await goalService.deleteGoal('', { token: 'mock-token' });
+        },
+        /Goal ID is required/i
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8. goalService: Headers, Request Construction & Status Filtering
+  // ---------------------------------------------------------------------------
+  describe('goalService: Headers, Request Construction & Status Filtering', () => {
+    it('getGoals constructs Authorization header and passes ?status query param', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(JSON.stringify({ success: true, count: 0, data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+
+      await goalService.getGoals({
+        status: 'ACTIVE',
+        token: 'test-goal-jwt',
+      });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/goals\?status=ACTIVE/);
+      assert.equal(req.options.headers.Authorization, 'Bearer test-goal-jwt');
+      assert.equal(req.options.headers.Accept, 'application/json');
+    });
+
+    it('getGoals omits status query when status is ALL', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(JSON.stringify({ success: true, count: 0, data: [] }), {
+          status: 200,
+        });
+      };
+
+      await goalService.getGoals({
+        status: 'ALL',
+        token: 'test-goal-jwt',
+      });
+
+      assert.equal(capturedRequests.length, 1);
+      assert.ok(!capturedRequests[0].url.includes('status='));
+    });
+
+    it('getGoals passes through AbortSignal to fetch', async () => {
+      const controller = new AbortController();
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(JSON.stringify({ success: true, count: 0, data: [] }), {
+          status: 200,
+        });
+      };
+
+      await goalService.getGoals({
+        token: 'test-goal-jwt',
+        signal: controller.signal,
+      });
+
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+
+    it('createGoal sends POST request with correct payload and headers', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Learning goal created successfully.',
+            data: { _id: 'goal-1', title: 'Learn React', currentLevel: 'BEGINNER' },
+          }),
+          { status: 201 }
+        );
+      };
+
+      const payload = {
+        title: 'Learn React',
+        description: 'Frontend library',
+        targetSkills: ['React', 'JavaScript'],
+        weeklyHours: 10,
+      };
+
+      const result = await goalService.createGoal(payload, { token: 'jwt-alpha' });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.equal(req.options.method, 'POST');
+      assert.equal(req.options.headers.Authorization, 'Bearer jwt-alpha');
+      assert.equal(req.options.headers['Content-Type'], 'application/json');
+      assert.deepEqual(JSON.parse(req.options.body), payload);
+      assert.equal(result.goal._id, 'goal-1');
+    });
+
+    it('updateGoal sends PATCH request with encoded URL and payload', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Learning goal updated successfully.',
+            data: { _id: 'goal-1', title: 'Updated Goal Title', status: 'COMPLETED' },
+          }),
+          { status: 200 }
+        );
+      };
+
+      const result = await goalService.updateGoal(
+        'goal-1',
+        { title: 'Updated Goal Title', status: 'COMPLETED' },
+        { token: 'jwt-alpha' }
+      );
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/goals\/goal-1$/);
+      assert.equal(req.options.method, 'PATCH');
+      assert.equal(req.options.headers.Authorization, 'Bearer jwt-alpha');
+      assert.deepEqual(JSON.parse(req.options.body), {
+        title: 'Updated Goal Title',
+        status: 'COMPLETED',
+      });
+      assert.equal(result.goal.status, 'COMPLETED');
+    });
+
+    it('getGoalById sends GET request with encoded URL, headers and parses response', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { _id: 'goal-456', title: 'Deep Learning', status: 'ACTIVE' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      };
+
+      const result = await goalService.getGoalById('goal-456', { token: 'jwt-alpha' });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/goals\/goal-456$/);
+      assert.equal(req.options.method, 'GET');
+      assert.equal(req.options.headers.Authorization, 'Bearer jwt-alpha');
+      assert.equal(req.options.headers.Accept, 'application/json');
+      assert.equal(result._id, 'goal-456');
+      assert.equal(result.title, 'Deep Learning');
+    });
+
+    it('getGoalById passes through AbortSignal to fetch', async () => {
+      const controller = new AbortController();
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({ success: true, data: { _id: 'goal-789' } }),
+          { status: 200 }
+        );
+      };
+
+      await goalService.getGoalById('goal-789', {
+        token: 'test-goal-jwt',
+        signal: controller.signal,
+      });
+
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+
+    it('deleteGoal sends DELETE request with Authorization header', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Learning goal deleted successfully.',
+          }),
+          { status: 200 }
+        );
+      };
+
+      const result = await goalService.deleteGoal('goal-1', { token: 'jwt-alpha' });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/goals\/goal-1$/);
+      assert.equal(req.options.method, 'DELETE');
+      assert.equal(req.options.headers.Authorization, 'Bearer jwt-alpha');
+      assert.equal(result.success, true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 9. goalService: Response Parsing & Error Extraction
+  // ---------------------------------------------------------------------------
+  describe('goalService: Response Parsing & Error Extraction', () => {
+    it('getGoals parses goals array and count', async () => {
+      const mockGoals = [
+        { _id: 'g1', title: 'Goal 1', status: 'ACTIVE' },
+        { _id: 'g2', title: 'Goal 2', status: 'COMPLETED' },
+      ];
+
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ success: true, count: 2, data: mockGoals }), {
+          status: 200,
+        });
+
+      const { goals, count } = await goalService.getGoals({ token: 'jwt' });
+      assert.equal(count, 2);
+      assert.equal(goals.length, 2);
+      assert.equal(goals[0].title, 'Goal 1');
+    });
+
+    it('handles non-200 responses by throwing structured error with status', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Weekly study hours must be a number between 1 and 168.',
+          }),
+          { status: 400 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await goalService.createGoal({ title: 'Goal', weeklyHours: 999 }, { token: 'jwt' });
+        },
+        (err) => {
+          assert.equal(err.status, 400);
+          assert.match(err.message, /Weekly study hours must be a number/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles non-JSON error responses (e.g. HTML 502) with fallback error message and status', async () => {
+      globalThis.fetch = async () =>
+        new Response('<html><body>502 Bad Gateway</body></html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        });
+
+      await assert.rejects(
+        async () => {
+          await goalService.getGoals({ token: 'jwt-alpha' });
+        },
+        (err) => {
+          assert.equal(err.status, 502);
+          assert.match(err.message, /Request failed with status 502/i);
+          assert.deepEqual(err.data, {});
+          return true;
+        }
+      );
     });
   });
 });

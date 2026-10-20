@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Courses from './pages/Courses';
 import CourseDetails from './pages/CourseDetails';
 import Bookmarks from './pages/Bookmarks';
+import Goals from './pages/Goals';
 import About from './pages/About';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -34,6 +35,10 @@ const router = createBrowserRouter([
       {
         path: 'learning',
         element: <Bookmarks />,
+      },
+      {
+        path: 'goals',
+        element: <Goals />,
       },
       {
         path: 'about',
