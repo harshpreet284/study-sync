@@ -53,43 +53,60 @@ export const BookmarksProvider = ({ children }) => {
   /**
    * Refreshes learning records from backend for authenticated users.
    */
-  const refreshLearning = useCallback(async () => {
+  const refreshLearning = useCallback(async (options = {}) => {
     if (!token || !isAuthenticated) {
       setLearningRecords([]);
       setIsLoading(false);
-      return;
+      return [];
     }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const { records } = await learningService.getLearningRecords({ token });
+      const { records } = await learningService.getLearningRecords({
+        token,
+        signal: options.signal,
+      });
       setLearningRecords(records);
+      return records;
     } catch (err) {
+      // Treat intentional cancellation as abort, not as user-facing error
+      if (err.name === 'AbortError' || options.signal?.aborted) {
+        return [];
+      }
       console.error('Failed to fetch personal learning records:', err);
       // If 401, session expired; do not leave stuck error
       if (err.status !== 401) {
         setError(err.message || 'Failed to load your learning library. Please try again.');
       }
+      return [];
     } finally {
-      setIsLoading(false);
+      if (!options.signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   }, [token, isAuthenticated]);
 
   /**
-   * Synchronize learning library on auth state changes.
+   * Synchronize learning library on auth state changes with stale-request protection.
    */
   useEffect(() => {
     if (isAuthLoading) return;
 
-    if (isAuthenticated && token) {
-      refreshLearning();
-    } else {
+    if (!isAuthenticated || !token) {
       setLearningRecords([]);
       setIsLoading(false);
       setError(null);
+      return;
     }
+
+    const controller = new AbortController();
+    refreshLearning({ signal: controller.signal });
+
+    return () => {
+      controller.abort();
+    };
   }, [isAuthenticated, token, isAuthLoading, refreshLearning]);
 
   /**
@@ -183,6 +200,13 @@ export const BookmarksProvider = ({ children }) => {
               if (alreadyPresent) return prev;
               return [result.record, ...prev];
             });
+          }
+          if (result.isDuplicate) {
+            return {
+              success: true,
+              action: 'already_added',
+              message: result.message || 'This resource is already in your learning library.',
+            };
           }
           return { success: true, action: 'added' };
         } catch (err) {
@@ -315,12 +339,19 @@ export const BookmarksProvider = ({ children }) => {
       return remaining;
     });
 
+    // Refresh the backend learning list so records that already existed and returned HTTP 409 appear in the UI
+    try {
+      await refreshLearning();
+    } catch (refreshErr) {
+      console.warn('[BookmarksMigration] Failed to refresh learning records after migration:', refreshErr);
+    }
+
     setIsMigrating(false);
     setMigrationStatus({
       migratedCount: successfullyMigrated.length,
       remainingCount: unmigratedOfflineIds.length - successfullyMigrated.length,
     });
-  }, [isAuthenticated, token, unmigratedOfflineIds]);
+  }, [isAuthenticated, token, unmigratedOfflineIds, refreshLearning]);
 
   const dismissAuthPrompt = useCallback(() => {
     setAuthPrompt({ isOpen: false, message: '' });
