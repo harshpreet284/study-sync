@@ -352,8 +352,115 @@ Error Responses:
 - `401 Unauthorized`: Missing or invalid token.
 - `404 Not Found`: Goal does not exist or does not belong to the authenticated user.
 
+## 8. Dashboard
 
-## 8. Authorization
+### GET /api/dashboard
+
+Purpose:
+Retrieve consolidated learning dashboard metrics, active goal, active study plan week, current resource, overall progress, and deterministic next-step recommendation for the authenticated user.
+
+Authentication: Required (`Authorization: Bearer <token>`)
+
+Requirements:
+- All queries strictly scoped to the authenticated user (`req.user._id`).
+- Primary active goal selected by `createdAt` descending (with `_id` secondary tiebreaker). Returns `activeGoal: null` if no active goals exist.
+- Overall progress calculated as the rounded arithmetic mean of progress percentages across all user resources in `LearningProgress`. Returns 0% when library is empty without division-by-zero.
+- Active week resolves to the earliest plan week containing at least one uncompleted resource. If all plan resources are completed, returns `isCompleted: true` and `activeWeek: null`. Plans with zero catalog resources return `hasResources: false`, `isCompleted: false`, and `activeWeek: null`, recommending a `REVIEW_PLAN` next-step.
+- Deterministic next step computed via application logic (no AI calls) using approved priority hierarchy.
+- Current in-progress resource returns the most recently updated resource with `status: 'IN_PROGRESS'`, or `null`.
+
+Success Response (`200 OK`):
+```json
+{
+  "success": true,
+  "data": {
+    "activeGoal": {
+      "_id": "65f1a2b3c4d5e6f7a8b9c0d1",
+      "title": "Master React & TypeScript",
+      "description": "Proficient component development",
+      "targetSkills": ["React", "TypeScript"],
+      "currentLevel": "BEGINNER",
+      "weeklyHours": 10,
+      "targetDate": "2026-11-20T00:00:00.000Z",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-20T21:40:00.000Z"
+    },
+    "currentPlan": {
+      "_id": "65f1a2b3c4d5e6f7a8b9c0d2",
+      "goalId": "65f1a2b3c4d5e6f7a8b9c0d1",
+      "generatedAt": "2026-10-20T21:40:00.000Z",
+      "totalWeeks": 6,
+      "hasResources": true,
+      "isCompleted": false,
+      "activeWeekNumber": 1,
+      "activeWeek": {
+        "weekNumber": 1,
+        "focus": "Week 1: Fundamentals of React Components",
+        "tasks": [
+          "Review component lifecycle",
+          "Build a sample counter widget"
+        ],
+        "resources": [
+          {
+            "_id": "65f1a2b3c4d5e6f7a8b9c0d3",
+            "title": "Modern React Deep Dive",
+            "type": "COURSE",
+            "platform": "StudySync Academy",
+            "thumbnail": "",
+            "difficulty": "INTERMEDIATE",
+            "estimatedDuration": 12,
+            "url": "https://example.com/react-deep-dive",
+            "status": "IN_PROGRESS",
+            "progress": 50
+          }
+        ]
+      }
+    },
+    "currentResource": {
+      "_id": "65f1a2b3c4d5e6f7a8b9c0d3",
+      "learningProgressId": "65f1a2b3c4d5e6f7a8b9c0d4",
+      "title": "Modern React Deep Dive",
+      "type": "COURSE",
+      "platform": "StudySync Academy",
+      "thumbnail": "",
+      "category": "Web Development",
+      "difficulty": "INTERMEDIATE",
+      "estimatedDuration": 12,
+      "url": "https://example.com/react-deep-dive",
+      "progress": 50,
+      "status": "IN_PROGRESS",
+      "startedAt": "2026-10-21T10:00:00.000Z",
+      "updatedAt": "2026-10-21T10:00:00.000Z"
+    },
+    "overallProgress": {
+      "percentage": 42,
+      "total": 3,
+      "saved": 1,
+      "inProgress": 1,
+      "completed": 1
+    },
+    "nextStep": {
+      "type": "RESUME_PLAN_RESOURCE",
+      "title": "Resume: Modern React Deep Dive",
+      "description": "You are 50% through this course in your study plan.",
+      "actionText": "Continue Learning",
+      "actionUrl": "/course/65f1a2b3c4d5e6f7a8b9c0d3",
+      "resourceId": "65f1a2b3c4d5e6f7a8b9c0d3"
+    },
+    "learningSummary": {
+      "saved": 1,
+      "inProgress": 1,
+      "completed": 1,
+      "total": 3
+    }
+  }
+}
+```
+
+Error Responses:
+- `401 Unauthorized`: Missing, expired, or invalid Bearer token.
+
+## 9. Authorization
 
 For user-owned endpoints:
 - Identify user from authenticated request.
@@ -362,19 +469,19 @@ For user-owned endpoints:
 
 Changing an ID in a URL must never allow one user to access another user's data.
 
-## 9. Validation Errors
+## 10. Validation Errors
 
 Invalid client input should produce a controlled 4xx response.
 
 Do not expose internal stack traces or sensitive implementation details.
 
-## 10. AI Errors
+## 11. AI Errors
 
 AI provider failures, malformed AI output, timeouts, and rate limits should result in controlled application errors.
 
 Raw provider errors should remain in server-side logs where appropriate.
 
-## 11. API Design Principle
+## 12. API Design Principle
 
 Keep the API small and aligned with actual product requirements.
 
