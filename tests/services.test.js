@@ -29,6 +29,7 @@ const {
 } = await import('../src/services/resourceService.js');
 const { tokenStorage } = await import('../src/services/authService.js');
 const { goalService } = await import('../src/services/goalService.js');
+const { planService } = await import('../src/services/planService.js');
 
 describe('Frontend Services Test Suite', () => {
   let originalFetch;
@@ -780,6 +781,438 @@ describe('Frontend Services Test Suite', () => {
       await assert.rejects(
         async () => {
           await goalService.getGoals({ token: 'jwt-alpha' });
+        },
+        (err) => {
+          assert.equal(err.status, 502);
+          assert.match(err.message, /Request failed with status 502/i);
+          assert.deepEqual(err.data, {});
+          return true;
+        }
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 10. planService: Authentication Guards & Input Validation
+  // ---------------------------------------------------------------------------
+  describe('planService: Authentication Guards & Input Validation', () => {
+    it('generatePlan rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan({ goalId: 'goal-123', token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required for study plans/i);
+          return true;
+        }
+      );
+    });
+
+    it('generatePlan validates goalId before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan('', { token: 'jwt-alpha' });
+        },
+        (err) => {
+          assert.match(err.message, /Goal ID is required to generate a study plan/i);
+          return true;
+        }
+      );
+
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan({ goalId: '   ', token: 'jwt-alpha' });
+        },
+        (err) => {
+          assert.match(err.message, /Goal ID is required to generate a study plan/i);
+          return true;
+        }
+      );
+    });
+
+    it('getPlanById rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await planService.getPlanById('plan-123', { token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required for study plans/i);
+          return true;
+        }
+      );
+    });
+
+    it('getPlanById validates planId before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await planService.getPlanById('', { token: 'jwt-alpha' });
+        },
+        (err) => {
+          assert.match(err.message, /Plan ID is required/i);
+          return true;
+        }
+      );
+    });
+
+    it('getPlanByGoalId rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await planService.getPlanByGoalId('goal-123', { token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required for study plans/i);
+          return true;
+        }
+      );
+    });
+
+    it('getPlanByGoalId validates goalId before network call', async () => {
+      await assert.rejects(
+        async () => {
+          await planService.getPlanByGoalId('  ', { token: 'jwt-alpha' });
+        },
+        (err) => {
+          assert.match(err.message, /Goal ID is required/i);
+          return true;
+        }
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11. planService: Request Construction, Headers, and Payload
+  // ---------------------------------------------------------------------------
+  describe('planService: Request Construction, Headers, and Payload', () => {
+    it('generatePlan sends POST to /api/plans/generate with Bearer token and { goalId } payload', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Learning plan generated successfully.',
+            data: { _id: 'plan-001', weeks: [] },
+          }),
+          { status: 200 }
+        );
+      };
+
+      const result = await planService.generatePlan('65f1a2b3c4d5e6f7a8b9c0d1', {
+        token: 'test-planner-jwt',
+      });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/plans\/generate$/);
+      assert.equal(req.options.method, 'POST');
+      assert.equal(req.options.headers.Authorization, 'Bearer test-planner-jwt');
+      assert.equal(req.options.headers['Content-Type'], 'application/json');
+      assert.equal(req.options.headers.Accept, 'application/json');
+
+      const body = JSON.parse(req.options.body);
+      assert.deepEqual(body, { goalId: '65f1a2b3c4d5e6f7a8b9c0d1' });
+      assert.equal(result.plan._id, 'plan-001');
+    });
+
+    it('generatePlan propagates AbortSignal to fetch', async () => {
+      const controller = new AbortController();
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { _id: 'plan-002', weeks: [] },
+          }),
+          { status: 200 }
+        );
+      };
+
+      await planService.generatePlan({
+        goalId: 'goal-abort',
+        token: 'jwt-abort',
+        signal: controller.signal,
+      });
+
+      assert.equal(capturedRequests.length, 1);
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+
+    it('getPlanById sends GET with encoded URL and Authorization header', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { _id: 'plan-abc', weeks: [] },
+          }),
+          { status: 200 }
+        );
+      };
+
+      const result = await planService.getPlanById('plan-abc', { token: 'jwt-id' });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/plans\/plan-abc$/);
+      assert.equal(req.options.method, 'GET');
+      assert.equal(req.options.headers.Authorization, 'Bearer jwt-id');
+      assert.equal(result._id, 'plan-abc');
+    });
+
+    it('getPlanById propagates AbortSignal to fetch', async () => {
+      const controller = new AbortController();
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { _id: 'plan-sig' },
+          }),
+          { status: 200 }
+        );
+      };
+
+      await planService.getPlanById('plan-sig', {
+        token: 'jwt-sig',
+        signal: controller.signal,
+      });
+
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+
+    it('getPlanByGoalId sends GET with encoded URL and Authorization header', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { _id: 'plan-goal-1', goal: 'goal-123', weeks: [] },
+          }),
+          { status: 200 }
+        );
+      };
+
+      const result = await planService.getPlanByGoalId('goal-123', { token: 'jwt-goal' });
+
+      assert.equal(capturedRequests.length, 1);
+      const req = capturedRequests[0];
+      assert.match(req.url, /\/api\/plans\/goal\/goal-123$/);
+      assert.equal(req.options.method, 'GET');
+      assert.equal(req.options.headers.Authorization, 'Bearer jwt-goal');
+      assert.equal(result._id, 'plan-goal-1');
+    });
+
+    it('getPlanByGoalId propagates AbortSignal to fetch', async () => {
+      const controller = new AbortController();
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: null,
+          }),
+          { status: 200 }
+        );
+      };
+
+      await planService.getPlanByGoalId('goal-signal', {
+        token: 'jwt-signal',
+        signal: controller.signal,
+      });
+
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 12. planService: Response Parsing & Status Handling
+  // ---------------------------------------------------------------------------
+  describe('planService: Response Parsing & Status Handling', () => {
+    it('generatePlan parses successful response containing plan and weeks', async () => {
+      const mockPlan = {
+        _id: 'plan-parse-1',
+        user: 'user-1',
+        weeks: [
+          {
+            weekNumber: 1,
+            focus: 'Introduction to React',
+            resources: [{ _id: 'res-1', title: 'React Basics' }],
+            tasks: ['Read chapter 1', 'Build sample component'],
+          },
+        ],
+      };
+
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Learning plan generated successfully.',
+            data: mockPlan,
+          }),
+          { status: 200 }
+        );
+
+      const result = await planService.generatePlan('goal-1', { token: 'jwt-parse' });
+
+      assert.equal(result.plan._id, 'plan-parse-1');
+      assert.equal(result.weeks.length, 1);
+      assert.equal(result.weeks[0].weekNumber, 1);
+      assert.equal(result.weeks[0].focus, 'Introduction to React');
+      assert.equal(result.weeks[0].resources[0].title, 'React Basics');
+      assert.equal(result.weeks[0].tasks.length, 2);
+    });
+
+    it('getPlanById parses populated plan object', async () => {
+      const mockPlan = {
+        _id: 'plan-by-id-1',
+        weeks: [{ weekNumber: 1, focus: 'TypeScript Fundamentals', resources: [], tasks: [] }],
+      };
+
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: mockPlan,
+          }),
+          { status: 200 }
+        );
+
+      const plan = await planService.getPlanById('plan-by-id-1', { token: 'jwt-parse' });
+      assert.equal(plan._id, 'plan-by-id-1');
+      assert.equal(plan.weeks[0].focus, 'TypeScript Fundamentals');
+    });
+
+    it('getPlanByGoalId returns plan data when plan exists', async () => {
+      const mockPlan = { _id: 'plan-exists', goal: 'goal-found', weeks: [] };
+
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: mockPlan,
+          }),
+          { status: 200 }
+        );
+
+      const plan = await planService.getPlanByGoalId('goal-found', { token: 'jwt-parse' });
+      assert.equal(plan._id, 'plan-exists');
+    });
+
+    it('getPlanByGoalId returns null when no plan exists yet (data: null)', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: null,
+            message: 'No study plan has been generated for this goal yet.',
+          }),
+          { status: 200 }
+        );
+
+      const plan = await planService.getPlanByGoalId('goal-no-plan', { token: 'jwt-parse' });
+      assert.equal(plan, null);
+    });
+
+    it('handles 400 Bad Request (insufficient catalog resources) with status and message', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Insufficient catalog resources match the skills for this goal.',
+          }),
+          { status: 400 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan('goal-no-resources', { token: 'jwt-err' });
+        },
+        (err) => {
+          assert.equal(err.status, 400);
+          assert.match(err.message, /Insufficient catalog resources/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles 429 Too Many Requests (rate limit) with status and message', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Too many study plan generation requests. Please try again after 15 minutes.',
+          }),
+          { status: 429 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan('goal-rate-limit', { token: 'jwt-err' });
+        },
+        (err) => {
+          assert.equal(err.status, 429);
+          assert.match(err.message, /Too many study plan generation requests/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles 502 Bad Gateway (AI provider failure) with status and message', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'The AI service returned an unprocessable response. Please try again.',
+          }),
+          { status: 502 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan('goal-provider-fail', { token: 'jwt-err' });
+        },
+        (err) => {
+          assert.equal(err.status, 502);
+          assert.match(err.message, /AI service returned an unprocessable response/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles 504 Gateway Timeout (provider timeout) with status and message', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'AI study plan generation timed out. Please try again.',
+          }),
+          { status: 504 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await planService.generatePlan('goal-timeout', { token: 'jwt-err' });
+        },
+        (err) => {
+          assert.equal(err.status, 504);
+          assert.match(err.message, /generation timed out/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles non-JSON error response (e.g. HTML 502) with fallback error message and status', async () => {
+      globalThis.fetch = async () =>
+        new Response('<html><body>502 Bad Gateway</body></html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        });
+
+      await assert.rejects(
+        async () => {
+          await planService.getPlanByGoalId('goal-html-502', { token: 'jwt-err' });
         },
         (err) => {
           assert.equal(err.status, 502);

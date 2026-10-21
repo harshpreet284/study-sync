@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { goalService } from '../services/goalService';
+import { planService } from '../services/planService';
 import GoalCard from '../components/GoalCard';
 import GoalModal from '../components/GoalModal';
 import GoalDeleteModal from '../components/GoalDeleteModal';
+import PlanModal from '../components/PlanModal';
 
 /**
  * Learning Goals page (Phase 6).
@@ -36,6 +38,16 @@ const Goals = () => {
   // Status updating state map: { [goalId]: boolean }
   const [updatingStatusIds, setUpdatingStatusIds] = useState({});
 
+  // Plan states (Phase 7 Groq Study Planner)
+  const [plansByGoalId, setPlansByGoalId] = useState({});
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [activePlanGoal, setActivePlanGoal] = useState(null);
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [isPlanGenerating, setIsPlanGenerating] = useState(false);
+  const [planError, setPlanError] = useState(null);
+  const activePlanFetchControllerRef = useRef(null);
+  const activeGenerateControllerRef = useRef(null);
+
   // In-app feedback alert toast: { message: string, type: 'success' | 'error' } | null
   const [feedback, setFeedback] = useState(null);
   const feedbackTimerRef = useRef(null);
@@ -62,10 +74,11 @@ const Goals = () => {
   // Track active fetch controller for cancellation on unmount, logout, or retry
   const activeFetchControllerRef = useRef(null);
 
-  // Fetch goals with explicit cancellation support
+  // Fetch goals with explicit cancellation support and plan discovery
   const fetchGoals = useCallback(async (signal) => {
     if (!isAuthenticated) {
       setGoals([]);
+      setPlansByGoalId({});
       return;
     }
 
@@ -76,6 +89,22 @@ const Goals = () => {
       const { goals: fetchedGoals } = await goalService.getGoals({ signal });
       if (signal?.aborted) return;
       setGoals(fetchedGoals);
+
+      // Concurrently query study plans for the retrieved goals
+      if (fetchedGoals.length > 0) {
+        Promise.allSettled(
+          fetchedGoals.map((g) => planService.getPlanByGoalId(g._id, { signal }))
+        ).then((results) => {
+          if (signal?.aborted) return;
+          const plansMap = {};
+          results.forEach((res, idx) => {
+            if (res.status === 'fulfilled') {
+              plansMap[fetchedGoals[idx]._id] = res.value;
+            }
+          });
+          setPlansByGoalId((prev) => ({ ...prev, ...plansMap }));
+        });
+      }
     } catch (err) {
       if (err.name === 'AbortError' || signal?.aborted) return;
       setError(err.message || 'Failed to load your learning goals.');
@@ -86,24 +115,50 @@ const Goals = () => {
     }
   }, [isAuthenticated]);
 
-  // Synchronize goals on auth changes with stale-request protection
+  // Synchronize goals on auth changes with stale-request protection and account isolation
   useEffect(() => {
     if (!isAuthenticated) {
       if (activeFetchControllerRef.current) {
         activeFetchControllerRef.current.abort();
         activeFetchControllerRef.current = null;
       }
+      if (activePlanFetchControllerRef.current) {
+        activePlanFetchControllerRef.current.abort();
+        activePlanFetchControllerRef.current = null;
+      }
+      if (activeGenerateControllerRef.current) {
+        activeGenerateControllerRef.current.abort();
+        activeGenerateControllerRef.current = null;
+      }
       setGoals([]);
+      setPlansByGoalId({});
       setIsModalOpen(false);
       setSelectedGoal(null);
       setGoalToDelete(null);
       setDeleteError(null);
+      setIsPlanModalOpen(false);
+      setActivePlanGoal(null);
+      setIsPlanGenerating(false);
+      setPlanError(null);
       return;
     }
 
     if (activeFetchControllerRef.current) {
       activeFetchControllerRef.current.abort();
     }
+    if (activePlanFetchControllerRef.current) {
+      activePlanFetchControllerRef.current.abort();
+      activePlanFetchControllerRef.current = null;
+    }
+    if (activeGenerateControllerRef.current) {
+      activeGenerateControllerRef.current.abort();
+      activeGenerateControllerRef.current = null;
+    }
+    setPlansByGoalId({});
+    setIsPlanModalOpen(false);
+    setActivePlanGoal(null);
+    setIsPlanGenerating(false);
+    setPlanError(null);
 
     const controller = new AbortController();
     activeFetchControllerRef.current = controller;
@@ -113,6 +168,14 @@ const Goals = () => {
       controller.abort();
       if (activeFetchControllerRef.current === controller) {
         activeFetchControllerRef.current = null;
+      }
+      if (activePlanFetchControllerRef.current) {
+        activePlanFetchControllerRef.current.abort();
+        activePlanFetchControllerRef.current = null;
+      }
+      if (activeGenerateControllerRef.current) {
+        activeGenerateControllerRef.current.abort();
+        activeGenerateControllerRef.current = null;
       }
     };
   }, [fetchGoals, isAuthenticated, user?._id]);
@@ -234,6 +297,15 @@ const Goals = () => {
     try {
       await goalService.deleteGoal(goalToDelete._id);
       setGoals((prev) => prev.filter((g) => g._id !== goalToDelete._id));
+      setPlansByGoalId((prev) => {
+        const next = { ...prev };
+        delete next[goalToDelete._id];
+        return next;
+      });
+      if (activePlanGoal?._id === goalToDelete._id) {
+        setIsPlanModalOpen(false);
+        setActivePlanGoal(null);
+      }
       showFeedback('Goal deleted successfully.', 'success');
       setGoalToDelete(null);
       setDeleteError(null);
@@ -242,6 +314,120 @@ const Goals = () => {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  // ---------------------------------------------------------------------------
+  // AI Study Plan Handlers (Phase 7 Groq AI)
+  // ---------------------------------------------------------------------------
+  const handleOpenPlan = async (goal) => {
+    setActivePlanGoal(goal);
+    setPlanError(null);
+    setIsPlanModalOpen(true);
+
+    // If plan for this goal hasn't been fetched yet, retrieve it
+    if (plansByGoalId[goal._id] === undefined) {
+      if (activePlanFetchControllerRef.current) {
+        activePlanFetchControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      activePlanFetchControllerRef.current = controller;
+      setIsPlanLoading(true);
+
+      try {
+        const plan = await planService.getPlanByGoalId(goal._id, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setPlansByGoalId((prev) => ({ ...prev, [goal._id]: plan }));
+      } catch (err) {
+        if (err.name === 'AbortError' || controller.signal.aborted) return;
+        setPlanError(err);
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsPlanLoading(false);
+          if (activePlanFetchControllerRef.current === controller) {
+            activePlanFetchControllerRef.current = null;
+          }
+        }
+      }
+    }
+  };
+
+  const handleGeneratePlan = async (goal) => {
+    if (!goal?._id || isPlanGenerating) return;
+
+    if (activeGenerateControllerRef.current) {
+      activeGenerateControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeGenerateControllerRef.current = controller;
+
+    setIsPlanGenerating(true);
+    setPlanError(null);
+
+    const activeUserId = user?._id;
+
+    try {
+      const result = await planService.generatePlan(goal._id, { signal: controller.signal });
+      if (controller.signal.aborted || user?._id !== activeUserId) return;
+
+      const newPlan = result.plan || result;
+      setPlansByGoalId((prev) => ({ ...prev, [goal._id]: newPlan }));
+      showFeedback('Study plan generated successfully!', 'success');
+    } catch (err) {
+      if (err.name === 'AbortError' || controller.signal.aborted || user?._id !== activeUserId) return;
+      setPlanError(err);
+    } finally {
+      if (!controller.signal.aborted && user?._id === activeUserId) {
+        setIsPlanGenerating(false);
+        if (activeGenerateControllerRef.current === controller) {
+          activeGenerateControllerRef.current = null;
+        }
+      }
+    }
+  };
+
+  const handleRegeneratePlan = async (goal) => {
+    if (!goal?._id || isPlanGenerating) return;
+
+    if (activeGenerateControllerRef.current) {
+      activeGenerateControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeGenerateControllerRef.current = controller;
+
+    setIsPlanGenerating(true);
+    setPlanError(null);
+
+    const activeUserId = user?._id;
+
+    try {
+      const result = await planService.generatePlan(goal._id, { signal: controller.signal });
+      if (controller.signal.aborted || user?._id !== activeUserId) return;
+
+      const newPlan = result.plan || result;
+      setPlansByGoalId((prev) => ({ ...prev, [goal._id]: newPlan }));
+      showFeedback('Study plan regenerated successfully!', 'success');
+    } catch (err) {
+      if (err.name === 'AbortError' || controller.signal.aborted || user?._id !== activeUserId) return;
+      setPlanError(err);
+    } finally {
+      if (!controller.signal.aborted && user?._id === activeUserId) {
+        setIsPlanGenerating(false);
+        if (activeGenerateControllerRef.current === controller) {
+          activeGenerateControllerRef.current = null;
+        }
+      }
+    }
+  };
+
+  const handleClosePlanModal = () => {
+    if (isPlanGenerating) return; // Prevent closing while generation is in flight
+    if (activePlanFetchControllerRef.current) {
+      activePlanFetchControllerRef.current.abort();
+      activePlanFetchControllerRef.current = null;
+    }
+    setIsPlanModalOpen(false);
+    setActivePlanGoal(null);
+    setPlanError(null);
   };
 
   // ---------------------------------------------------------------------------
@@ -520,6 +706,8 @@ const Goals = () => {
                 }}
                 onStatusChange={handleStatusChange}
                 isUpdatingStatus={Boolean(updatingStatusIds[goal._id])}
+                hasPlan={Boolean(plansByGoalId[goal._id])}
+                onOpenPlan={handleOpenPlan}
               />
             ))}
           </div>
@@ -544,6 +732,24 @@ const Goals = () => {
         goalTitle={goalToDelete?.title || ''}
         isDeleting={isDeleting}
         deleteError={deleteError}
+      />
+
+      {/* AI Study Planner Modal (Phase 7 Groq Study Planner) */}
+      <PlanModal
+        isOpen={isPlanModalOpen}
+        onClose={handleClosePlanModal}
+        goal={activePlanGoal}
+        plan={activePlanGoal ? plansByGoalId[activePlanGoal._id] || null : null}
+        isLoading={isPlanLoading}
+        isGenerating={isPlanGenerating}
+        error={planError}
+        onGenerate={handleGeneratePlan}
+        onRegenerate={handleRegeneratePlan}
+        onRetry={() => {
+          if (activePlanGoal) {
+            handleGeneratePlan(activePlanGoal);
+          }
+        }}
       />
     </div>
   );

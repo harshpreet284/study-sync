@@ -7,6 +7,10 @@ const GoalCard = ({
   onDelete,
   onStatusChange,
   isUpdatingStatus = false,
+  hasPlan = false,
+  onOpenPlan,
+  onGeneratePlan,
+  onViewPlan,
 }) => {
   const {
     _id,
@@ -143,6 +147,50 @@ const GoalCard = ({
             <span>Target completion: <strong className="font-semibold text-text">{formattedTargetDate}</strong></span>
           </div>
         )}
+
+        {/* Study Plan Section */}
+        <div className="mt-4 pt-3.5 border-t border-gray-100 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-dark-gray min-w-0">
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 flex-shrink-0 ${hasPlan ? 'text-primary' : 'text-gray'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="truncate font-medium">
+              {hasPlan ? 'AI Study Plan ready' : 'AI Study Plan'}
+            </span>
+          </div>
+
+          {hasPlan ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (onViewPlan) onViewPlan(goal);
+                else if (onOpenPlan) onOpenPlan(goal);
+              }}
+              className="px-3 py-1.5 bg-indigo-50 text-primary hover:bg-primary hover:text-white font-semibold text-xs rounded-lg transition-colors border border-indigo-200 flex items-center gap-1 flex-shrink-0"
+              title="View existing study plan"
+            >
+              <span>View Study Plan</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (onGeneratePlan) onGeneratePlan(goal);
+                else if (onOpenPlan) onOpenPlan(goal);
+              }}
+              className="px-3 py-1.5 bg-gradient-to-r from-primary/10 to-purple-50 text-primary hover:bg-primary hover:text-white font-semibold text-xs rounded-lg transition-colors border border-primary/20 flex items-center gap-1 flex-shrink-0"
+              title="Generate new AI study plan"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Generate Study Plan</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Card Footer Actions */}
