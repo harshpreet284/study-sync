@@ -30,6 +30,7 @@ const {
 const { tokenStorage } = await import('../src/services/authService.js');
 const { goalService } = await import('../src/services/goalService.js');
 const { planService } = await import('../src/services/planService.js');
+const { dashboardService } = await import('../src/services/dashboardService.js');
 
 describe('Frontend Services Test Suite', () => {
   let originalFetch;
@@ -1218,6 +1219,258 @@ describe('Frontend Services Test Suite', () => {
           assert.equal(err.status, 502);
           assert.match(err.message, /Request failed with status 502/i);
           assert.deepEqual(err.data, {});
+          return true;
+        }
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 13. dashboardService: Authentication Guards & Input Validation
+  // ---------------------------------------------------------------------------
+  describe('dashboardService: Authentication Guards & Input Validation', () => {
+    it('getDashboardData rejects with HTTP 401 when token is missing', async () => {
+      await assert.rejects(
+        async () => {
+          await dashboardService.getDashboardData({ token: '' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required/i);
+          return true;
+        }
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 14. dashboardService: Request Construction, Headers, and Method
+  // ---------------------------------------------------------------------------
+  describe('dashboardService: Request Construction, Headers, and Method', () => {
+    it('getDashboardData sends GET to /api/dashboard with Bearer token and Accept header', async () => {
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              activeGoal: null,
+              currentPlan: null,
+              currentResource: null,
+              overallProgress: { percentage: 0, total: 0, saved: 0, inProgress: 0, completed: 0 },
+              nextStep: {
+                type: 'CREATE_GOAL',
+                title: 'Set a Learning Goal',
+                description: 'Define your target skills and weekly study hours to receive a structured roadmap.',
+                actionText: 'Create Goal',
+                actionUrl: '/goals',
+                resourceId: null,
+              },
+              learningSummary: { saved: 0, inProgress: 0, completed: 0, total: 0 },
+            },
+          }),
+          { status: 200 }
+        );
+      };
+
+      await dashboardService.getDashboardData({ token: 'jwt-dash-test' });
+
+      assert.equal(capturedRequests.length, 1);
+      assert.match(capturedRequests[0].url, /\/api\/dashboard$/);
+      assert.equal(capturedRequests[0].options.method, 'GET');
+      assert.equal(capturedRequests[0].options.headers['Authorization'], 'Bearer jwt-dash-test');
+      assert.equal(capturedRequests[0].options.headers['Accept'], 'application/json');
+    });
+
+    it('getDashboardData passes through AbortSignal when passed directly as signal', async () => {
+      const controller = new AbortController();
+
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({ success: true, data: {} }),
+          { status: 200 }
+        );
+      };
+
+      await dashboardService.getDashboardData(controller.signal, { token: 'jwt-dash-sig' });
+
+      assert.equal(capturedRequests.length, 1);
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+
+    it('getDashboardData passes through AbortSignal when passed in options object', async () => {
+      const controller = new AbortController();
+
+      globalThis.fetch = async (url, options) => {
+        capturedRequests.push({ url, options });
+        return new Response(
+          JSON.stringify({ success: true, data: {} }),
+          { status: 200 }
+        );
+      };
+
+      await dashboardService.getDashboardData({
+        token: 'jwt-dash-sig-opt',
+        signal: controller.signal,
+      });
+
+      assert.equal(capturedRequests.length, 1);
+      assert.equal(capturedRequests[0].options.signal, controller.signal);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 15. dashboardService: Response Parsing & Status Handling
+  // ---------------------------------------------------------------------------
+  describe('dashboardService: Response Parsing & Status Handling', () => {
+    it('getDashboardData parses successful dashboard payload', async () => {
+      const mockData = {
+        activeGoal: {
+          _id: 'goal-123',
+          title: 'Master React & TypeScript',
+          targetSkills: ['React', 'TypeScript'],
+        },
+        currentPlan: {
+          _id: 'plan-123',
+          totalWeeks: 4,
+          hasResources: true,
+          isCompleted: false,
+          activeWeekNumber: 1,
+        },
+        currentResource: {
+          _id: 'res-123',
+          title: 'React Fundamentals',
+          progress: 50,
+          status: 'IN_PROGRESS',
+        },
+        overallProgress: {
+          percentage: 50,
+          total: 2,
+          saved: 0,
+          inProgress: 1,
+          completed: 1,
+        },
+        nextStep: {
+          type: 'RESUME_PLAN_RESOURCE',
+          title: 'Resume: React Fundamentals',
+          description: 'You are 50% through this course in your study plan.',
+          actionText: 'Continue Learning',
+          actionUrl: '/course/res-123',
+          resourceId: 'res-123',
+        },
+        learningSummary: {
+          saved: 0,
+          inProgress: 1,
+          completed: 1,
+          total: 2,
+        },
+      };
+
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: mockData,
+          }),
+          { status: 200 }
+        );
+
+      const data = await dashboardService.getDashboardData({ token: 'jwt-dash-parse' });
+
+      assert.equal(data.activeGoal._id, 'goal-123');
+      assert.equal(data.activeGoal.title, 'Master React & TypeScript');
+      assert.equal(data.currentPlan.totalWeeks, 4);
+      assert.equal(data.currentPlan.hasResources, true);
+      assert.equal(data.currentResource.progress, 50);
+      assert.equal(data.overallProgress.percentage, 50);
+      assert.equal(data.nextStep.type, 'RESUME_PLAN_RESOURCE');
+      assert.equal(data.learningSummary.total, 2);
+    });
+
+    it('handles 401 Unauthorized with status and error message', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Authentication required to access dashboard.',
+          }),
+          { status: 401 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await dashboardService.getDashboardData({ token: 'jwt-invalid' });
+        },
+        (err) => {
+          assert.equal(err.status, 401);
+          assert.match(err.message, /Authentication required to access dashboard/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles 500 Internal Server Error with status and parsed error message', async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Internal server error while compiling dashboard metrics.',
+          }),
+          { status: 500 }
+        );
+
+      await assert.rejects(
+        async () => {
+          await dashboardService.getDashboardData({ token: 'jwt-dash-500' });
+        },
+        (err) => {
+          assert.equal(err.status, 500);
+          assert.match(err.message, /Internal server error while compiling dashboard metrics/i);
+          return true;
+        }
+      );
+    });
+
+    it('handles non-JSON error response (e.g. HTML 502) with fallback error message and status', async () => {
+      globalThis.fetch = async () =>
+        new Response('<html><body>502 Bad Gateway</body></html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        });
+
+      await assert.rejects(
+        async () => {
+          await dashboardService.getDashboardData({ token: 'jwt-dash-html' });
+        },
+        (err) => {
+          assert.equal(err.status, 502);
+          assert.match(err.message, /Request failed with status 502/i);
+          assert.deepEqual(err.data, {});
+          return true;
+        }
+      );
+    });
+
+    it('propagates cancellation when AbortSignal is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      globalThis.fetch = async (url, options) => {
+        if (options?.signal?.aborted) {
+          const abortErr = new Error('This operation was aborted');
+          abortErr.name = 'AbortError';
+          throw abortErr;
+        }
+        return new Response(JSON.stringify({ success: true, data: {} }), { status: 200 });
+      };
+
+      await assert.rejects(
+        async () => {
+          await dashboardService.getDashboardData(controller.signal, { token: 'jwt-abort' });
+        },
+        (err) => {
+          assert.equal(err.name, 'AbortError');
           return true;
         }
       );

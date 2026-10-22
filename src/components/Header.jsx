@@ -36,6 +36,9 @@ const Header = () => {
         <nav className="hidden md:flex items-center gap-7">
           <NavLink to="/" className={getNavClass}>Home</NavLink>
           <NavLink to="/courses" className={getNavClass}>Courses</NavLink>
+          {isAuthenticated && (
+            <NavLink to="/dashboard" className={getNavClass}>Dashboard</NavLink>
+          )}
           <NavLink to="/bookmarks" className={getNavClass}>
             {isAuthenticated ? 'My Learning' : 'Bookmarks'}
           </NavLink>
@@ -100,6 +103,9 @@ const Header = () => {
         <div className="md:hidden absolute top-full left-0 w-full bg-white border-t border-gray-100 shadow-lg animate-fadeIn flex flex-col p-4 z-40">
           <NavLink to="/" onClick={closeMenu} className={getMobileNavClass}>Home</NavLink>
           <NavLink to="/courses" onClick={closeMenu} className={getMobileNavClass}>Courses</NavLink>
+          {isAuthenticated && (
+            <NavLink to="/dashboard" onClick={closeMenu} className={getMobileNavClass}>Dashboard</NavLink>
+          )}
           <NavLink to="/bookmarks" onClick={closeMenu} className={getMobileNavClass}>
             {isAuthenticated ? 'My Learning' : 'Bookmarks'}
           </NavLink>

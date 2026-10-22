@@ -5,6 +5,8 @@ import Courses from './pages/Courses';
 import CourseDetails from './pages/CourseDetails';
 import Bookmarks from './pages/Bookmarks';
 import Goals from './pages/Goals';
+import Dashboard from './pages/Dashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import About from './pages/About';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -35,6 +37,14 @@ const router = createBrowserRouter([
       {
         path: 'learning',
         element: <Bookmarks />,
+      },
+      {
+        path: 'dashboard',
+        element: (
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'goals',
