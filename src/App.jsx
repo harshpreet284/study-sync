@@ -4,7 +4,12 @@ import Home from './pages/Home';
 import Courses from './pages/Courses';
 import CourseDetails from './pages/CourseDetails';
 import Bookmarks from './pages/Bookmarks';
+import Goals from './pages/Goals';
+import Dashboard from './pages/Dashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import About from './pages/About';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import NotFound from './pages/NotFound';
 
 const router = createBrowserRouter([
@@ -30,8 +35,32 @@ const router = createBrowserRouter([
         element: <Bookmarks />,
       },
       {
+        path: 'learning',
+        element: <Bookmarks />,
+      },
+      {
+        path: 'dashboard',
+        element: (
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'goals',
+        element: <Goals />,
+      },
+      {
         path: 'about',
         element: <About />,
+      },
+      {
+        path: 'login',
+        element: <Login />,
+      },
+      {
+        path: 'register',
+        element: <Register />,
       },
       {
         path: 'contact',
