@@ -298,6 +298,7 @@ const runDashboardTests = async () => {
       weeklyHours: 12,
       targetDate: new Date('2026-12-31T00:00:00Z'),
       status: 'ACTIVE',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
     });
     createdGoalIds.push(goalA1._id);
 
@@ -323,23 +324,24 @@ const runDashboardTests = async () => {
     console.log('\n[Suite: Multiple Active Goals & Timestamp Tie-Breaking]');
 
     // Test A: Different createdAt timestamps
-    const goalA_older = await LearningGoal.create({
-      user: userA._id,
-      title: 'Older Active Goal',
-      targetSkills: ['JavaScript'],
-      status: 'ACTIVE',
-      createdAt: new Date('2026-01-01T00:00:00Z'),
-    });
-    createdGoalIds.push(goalA_older._id);
-
+    // Create goalA_newer first so goalA_older receives higher _id, proving createdAt takes precedence over _id
     const goalA_newer = await LearningGoal.create({
       user: userA._id,
       title: 'Newest Active Goal',
       targetSkills: ['React'],
       status: 'ACTIVE',
-      createdAt: new Date('2026-10-21T12:00:00Z'),
+      createdAt: new Date('2026-03-01T00:00:00Z'),
     });
     createdGoalIds.push(goalA_newer._id);
+
+    const goalA_older = await LearningGoal.create({
+      user: userA._id,
+      title: 'Older Active Goal',
+      targetSkills: ['JavaScript'],
+      status: 'ACTIVE',
+      createdAt: new Date('2026-02-01T00:00:00Z'),
+    });
+    createdGoalIds.push(goalA_older._id);
 
     const multiGoalRes = await fetch(baseUrl, {
       headers: { Authorization: `Bearer ${tokenA}` },
@@ -392,6 +394,7 @@ const runDashboardTests = async () => {
       weeklyHours: 12,
       targetDate: new Date('2026-12-31T00:00:00Z'),
       status: 'ACTIVE',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
     });
     console.log(`✓ Restored primary active goal (${restoredGoalA1._id})`);
 
